@@ -1,0 +1,30 @@
+{
+  "name": "spider",
+  "version": "1.0.0",
+  "description": "Handy little tool to check for missing dependencies",
+  "main": "index.js",
+  "preferGlobal": true,
+  "scripts": {
+    "test": "node . ./test.js",
+    "start": "node ./index.js"
+  },
+  "bin": {
+    "spider": "index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theonlyjohnny/spider.git"
+  },
+  "author": "Johnny Dallas <johnnydallas0308@gmail.com> (https://github.com/theonlyjohnny)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/theonlyjohnny/spider/issues"
+  },
+  "homepage": "https://github.com/theonlyjohnny/spider#readme",
+  "dependencies": {
+    "bluebird": "^3.5.0",
+    "colors": "^1.1.2",
+    "lodash": "^4.17.4",
+    "yargs": "^7.0.2"
+  }
+}
