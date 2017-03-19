@@ -142,10 +142,6 @@ if (fs.existsSync('./yarn.lock')) {
   cmd = 'yarn';
 }
 
-// cp.exec(`rm -rf ./node_modules && ${cmd ? cmd : 'npm i'}`, () => {
-//   run(path)
-// });
-
-const _module = require("module");
-console.log(_module);
-// fs.writeFileSync('./m.json', require("module"));
+cp.exec(`rm -rf ./node_modules && ${cmd ? cmd : 'npm i'}`, () => {
+  run(path)
+});
