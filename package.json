@@ -1,6 +1,6 @@
 {
-  "name": "spider",
-  "version": "1.0.0",
+  "name": "elmers",
+  "version": "1.0.1",
   "description": "Handy little tool to check for missing dependencies",
   "main": "index.js",
   "preferGlobal": true,
@@ -9,22 +9,25 @@
     "start": "node ./index.js"
   },
   "bin": {
-    "spider": "index.js"
+    "elmer": "index.js",
+    "elmers": "index.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/theonlyjohnny/spider.git"
+    "url": "git+https://github.com/theonlyjohnny/elmers.git"
   },
   "author": "Johnny Dallas <johnnydallas0308@gmail.com> (https://github.com/theonlyjohnny)",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/theonlyjohnny/spider/issues"
+    "url": "https://github.com/theonlyjohnny/elmers/issues"
   },
-  "homepage": "https://github.com/theonlyjohnny/spider#readme",
+  "homepage": "https://github.com/theonlyjohnny/elmers#readme",
   "dependencies": {
     "bluebird": "^3.5.0",
     "colors": "^1.1.2",
     "lodash": "^4.17.4",
+    "request": "^2.81.0",
+    "request-promise": "^4.2.0",
     "yargs": "^7.0.2"
   }
 }

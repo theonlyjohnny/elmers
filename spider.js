@@ -3,26 +3,35 @@ const Promise = require("bluebird"),
   Path = require("path"),
   cp = require("child_process"),
   fs = Promise.promisifyAll(require("fs")),
+  rp = require("request-promise"),
   colors = require("colors");
 
 class Spider {
-  constructor(path, verbose) {
+  constructor(path, options) {
     this.path = path;
-    this.verbose = verbose;
+
+    for (let opt in options) {
+      this[opt] = options[opt];
+    }
 
     this.addedModules = [];
     this.erroring = [];
     this.good = [];
-    this.savedPackages = [];
+    this.canUpgrade = [];
+    this.savedPackages = {};
 
     this.managerDict = {
       npm: {
         install: 'npm i',
-        add: 'npm i'
+        add: 'npm i',
+        save: 'npm i --save',
+        upgrade: 'npm update'
       },
       yarn: {
         install: 'yarn',
-        add: 'yarn add'
+        add: 'yarn add',
+        save: 'yarn add',
+        upgrade: 'yarn upgrade'
       }
     }
 
@@ -32,15 +41,61 @@ class Spider {
       this.manager = 'yarn';
     }
 
+    this.managerDict = this.managerDict[this.manager];
+
     this.tries = 0;
     this.childLife = 10 * 1000;
-    console.log(`Crawling ${path} ${this.verbose ? 'in verbose mode' : ''}`);
 
-    const initCmd = `rm -rf ./node_modules && ${this.managerDict[this.manager].install}`;
-
+    const initCmd = `rm -rf ./node_modules && ${this.managerDict.install}`;
+    console.log(colors.grey(`Clearing node_modules`))
     cp.exec(initCmd, () => {
+      console.log(colors.grey('node_modules re-installed from package.json'));
+      console.log(colors.cyan(`Crawling ${path} ${this.verbose ? 'in verbose mode' : ''}`));
       this.run(this.path)
     });
+  }
+
+  checkUpdates() {
+    if (!this.verbose) return;
+
+    const promises = [];
+    for (const pkg in this.savedPackages) {
+      const opts = {
+        method: "GET",
+        url: `https://npmjs.org/-/search`,
+        json: true,
+        qs: {
+          text: pkg
+        }
+      }
+      promises.push(rp(opts));
+    }
+
+    Promise.map(promises, data => {
+        const obj = data.objects[0].package;
+        const { name } = obj;
+        // console.log(obj, name);
+        const latest = obj.version;
+        try {
+          const version = JSON.parse(fs.readFileSync(Path.resolve(`./node_modules/${name}/package.json`))).version;
+
+          if (version !== latest && parseFloat(version) < parseFloat(latest)) {
+            this.canUpgrade.push(name);
+          }
+        } catch (err) {
+          //if for some reason pkg isn't there, fail silently
+        }
+      })
+      .then(() => {
+        console.log(colors.cyan(`Packages to upgrade:`), colors.green(this.canUpgrade.length ? this.canUpgrade.join(", ") : 'none'));
+      }).then(() => {
+        if (this.force) {
+          console.log(colors.grey(`Upgrading packages`));
+          cp.exec(this.managerDict.upgrade, () => {
+            console.log(colors.grey('Packages upgraded'));
+          })
+        }
+      })
   }
 
   checkFile(path) {
@@ -106,42 +161,27 @@ class Spider {
     console.log(`Getting paths for ${origin}`);
     return fs.readdirAsync(origin)
       .then(contents => contents.filter(path => path.indexOf('node_modules') === -1))
+      //no node_modules
       .then(contents => contents.filter(path => {
         const split_path = path.split("/");
         return !split_path[split_path.length - 1].startsWith(".")
+          //no dot files
       }))
+      .then(files => files.filter(file => file.endsWith('.js')))
+      //has to end w/ .js
       .then(files => files.map(file => Path.resolve(origin, file)))
-      .then(files => {
-        return files.map(file => {
-          console.log(colors.grey(`Statting ${file}`));
-          return (fs.statAsync(file)
-            .then(stat => ({
-              isDir: stat.isDirectory(),
-              fileName: file
-            }))
-          )
-        })
-      })
-      .then(promises => Promise.all(promises))
-      .then(data => data.filter(info => {
-        if (info.isDir) {
-          return info
-        } else {
-          if (info.fileName.endsWith('.js')) return info;
-        }
-      }))
-      .then(infos => Promise.map(infos, (info => {
-        if (info.isDir) {
-          return this.getPaths(info.fileName)
-        } else {
-          return Promise.resolve(info.fileName);
-        }
-      })))
+      .then(files => files.map(file => (
+        fs.statAsync(file)
+        .then(stat => ({
+          isDir: stat.isDirectory(),
+          fileName: file
+        }))
+      )))
+      .then(promises => Promise.map(promises, info => info.isDir ? this.getPaths(info.fileName) : info.fileName))
       .then(files => _.compact(_.flattenDeep(files)))
   }
 
   run(path) {
-
     if (this.tries >= 2) {
       console.log(`We tried 5 times, gonna stop now :(`)
       process.exit(0);
@@ -151,24 +191,33 @@ class Spider {
       .then(stats => {
         const isDir = stats.isDirectory();
         if (isDir) {
+          //working on a project
           const package_path = Path.resolve(path, './package.json')
           if (fs.existsSync(package_path)) {
             const data = JSON.parse(fs.readFileSync(package_path));
-            Object.keys(data.dependencies)
-              .forEach(dep => this.savedPackages.push(dep));
+            this.savedPackages = data.dependencies;
+            this.checkUpdates();
           }
           return this.getPaths(path)
             .then(paths => Promise.map(paths, path => this.checkFile(path)))
         } else {
+          //working on 1 file
           return this.checkFile(path)
         }
       })
       .then(() => {
-        console.log(colors.cyan(`Installed packages: ${this.savedPackages.length ? colors.green(this.savedPackages.join(", ")) : colors.yellow('Unavailable')}`));
+        const savedMap = Object.keys(this.savedPackages);
+        console.log(colors.cyan(`Installed packages: ${savedMap.length ? colors.green(savedMap.join(", ")) : colors.yellow('Unavailable')}`));
         console.log(colors.cyan(`Fatal crashes from: ${this.erroring.length ? colors.red(this.erroring) : colors.green('none')}`));
         console.log(colors.cyan(`Modules to add: ${this.addedModules.length ? colors.red(this.addedModules) : colors.green('none')}`));
         if (!this.erroring.length && !this.addedModules.length) {
-          console.log(colors.green(`Yay! No problems in that code!`));
+          console.log(colors.green(`Yay! No problems found!`));
+        } else if (this.force && this.addedModules.length) {
+          const cmd = `${this.managerDict.save} ${this.addedModules.join(" ")}`;
+          console.log(colors.cyan(`Installing missing modules...`));
+          cp.exec(cmd, () => {
+            console.log(colors.green(`Installed succesfully! Re-run Spider to see if you're all good ;)`));
+          })
         }
       })
       .catch(err => {
